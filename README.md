@@ -9,7 +9,7 @@ Monitored machines use **Zabbix Agent** (installed on the host) or **Agent 2 in 
 - Linux host with Docker Engine and Docker Compose v2.24+
 - Ports reachable from monitored hosts:
   - **10051/TCP** — Zabbix server (agents send data here)
-  - **8080/TCP** (or your `ZABBIX_WEB_PORT`) — web UI
+  - **8051/TCP** (or your `ZABBIX_WEB_PORT`) — web UI
 
 ## Quick start
 
@@ -22,7 +22,7 @@ docker compose up -d
 
 First startup can take 1–3 minutes while the database is initialized.
 
-- **Web UI:** `http://<server-host>:8080` (or your `ZABBIX_WEB_PORT`)
+- **Web UI:** `http://<server-host>:8051` (or your `ZABBIX_WEB_PORT`)
 - **Default login:** `Admin` / `zabbix` — change the password immediately.
 
 Check status:
@@ -74,7 +74,7 @@ Do not set `ZBX_SERVER_HOST=zabbix-server` unless the agent container shares a n
 
 ```bash
 # ufw on the Zabbix server host
-sudo ufw allow 8080/tcp comment 'Zabbix web'
+sudo ufw allow 8051/tcp comment 'Zabbix web'
 sudo ufw allow 10051/tcp comment 'Zabbix agents'
 ```
 
