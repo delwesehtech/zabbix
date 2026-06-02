@@ -1,8 +1,8 @@
 # Zabbix server (Docker Compose)
 
-Zabbix **7.4** server stack for Linux: PostgreSQL, Zabbix server, web UI (Nginx), and web service (scheduled reports).
+Zabbix **7.4** server stack for Linux: PostgreSQL, Zabbix server, and web UI (Nginx).
 
-Monitored machines use **Zabbix Agent** (installed on the host) or **Agent 2 in Docker** — see [Connecting agents](#connecting-agents).
+Monitored machines use **Zabbix Agent** (installed on the host) or **Agent 2 in Docker** — see [Connecting agents](#connecting-agents). This setup assumes agents are on the **same trusted LAN** (plaintext on port 10051, no PSK/TLS).
 
 ## Requirements
 
@@ -87,16 +87,29 @@ Database migrations run automatically on server start.
 
 ## Optional components
 
-This stack omits Java gateway and SNMP traps by default. Enable in `docker-compose.yml` if you need JMX or SNMP trap collection — see [official Zabbix Docker docs](https://www.zabbix.com/documentation/current/en/manual/installation/containers).
+This stack omits the Java gateway, SNMP traps, and the web service (scheduled PDF reports). Add them in `docker-compose.yml` if you later need JMX, SNMP traps, or reports — see [official Zabbix Docker docs](https://www.zabbix.com/documentation/current/en/manual/installation/containers).
 
 ## Data layout
 
-Persistent data under `./data/` (gitignored):
+The database lives in a Docker **named volume** (`zabbix_postgres_data`), so there are no host-permission issues.
 
-- `data/postgres/` — database
-- `data/zabbix/` — scripts, export, SSL, etc.
+Custom scripts you provide are bind-mounted read-only from `./data/` (gitignored):
 
-Backup `data/postgres` and your `.env` before major upgrades.
+- `data/alertscripts/` — custom alert/notification scripts
+- `data/externalscripts/` — external checks
+
+Backups:
+
+```bash
+# Database dump
+docker compose exec -T postgres pg_dump -U zabbix zabbix | gzip > zabbix-$(date +%F).sql.gz
+
+# Or snapshot the raw volume
+docker run --rm -v zabbix_postgres_data:/data -v "$PWD":/backup alpine \
+  tar czf /backup/postgres_data.tar.gz -C /data .
+```
+
+Back up the database and your `.env` before major upgrades.
 
 ## License
 

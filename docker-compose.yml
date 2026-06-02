@@ -1,12 +1,12 @@
-# Zabbix 7.4 server stack (PostgreSQL + server + web UI + web service).
-# Agents run on monitored hosts (native or separate compose) — not included here.
+# Zabbix 7.4 server stack (PostgreSQL + server + web UI).
+# Agents run on monitored hosts (native package or the example agent compose) — not here.
 #
 # Usage:
-#   cp .env.example .env   # set POSTGRES_PASSWORD and ZABBIX_WEB_PORT
+#   cp .env.example .env   # set POSTGRES_PASSWORD (required)
 #   docker compose up -d
 #
 # Web UI: http://<host>:${ZABBIX_WEB_PORT:-8080}  (default login Admin / zabbix)
-# Agent trapper: <host>:10051
+# Agent trapper: <host>:10051  (agents on the same trusted LAN, plaintext)
 
 services:
   postgres:
@@ -17,7 +17,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-zabbix}
     volumes:
-      - ${DATA_DIRECTORY:-./data}/postgres:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - zabbix-backend
     healthcheck:
@@ -58,21 +58,13 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-zabbix}
       ZBX_NODEADDRESS: zabbix-server:10051
-      ZBX_WEBSERVICEURL: http://zabbix-web-service:10053/report
       ZBX_JAVAGATEWAY_ENABLE: "false"
       ZBX_ENABLE_SNMP_TRAPS: "false"
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - ${DATA_DIRECTORY:-./data}/zabbix/alertscripts:/usr/lib/zabbix/alertscripts:ro
-      - ${DATA_DIRECTORY:-./data}/zabbix/externalscripts:/usr/lib/zabbix/externalscripts:ro
-      - ${DATA_DIRECTORY:-./data}/zabbix/export:/var/lib/zabbix/export:rw
-      - ${DATA_DIRECTORY:-./data}/zabbix/modules:/var/lib/zabbix/modules:ro
-      - ${DATA_DIRECTORY:-./data}/zabbix/enc:/var/lib/zabbix/enc:ro
-      - ${DATA_DIRECTORY:-./data}/zabbix/ssh_keys:/var/lib/zabbix/ssh_keys:ro
-      - ${DATA_DIRECTORY:-./data}/zabbix/mibs:/var/lib/zabbix/mibs:ro
-      - ${DATA_DIRECTORY:-./data}/zabbix/ssl/certs:/var/lib/zabbix/ssl/certs:ro
-      - ${DATA_DIRECTORY:-./data}/zabbix/ssl/keys:/var/lib/zabbix/ssl/keys:ro
-      - ${DATA_DIRECTORY:-./data}/zabbix/ssl/ssl_ca:/var/lib/zabbix/ssl/ssl_ca:rw
+      # Drop custom alert/external-check scripts into these host dirs (read-only to the container):
+      - ${DATA_DIRECTORY:-./data}/alertscripts:/usr/lib/zabbix/alertscripts:ro
+      - ${DATA_DIRECTORY:-./data}/externalscripts:/usr/lib/zabbix/externalscripts:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -119,23 +111,9 @@ services:
       retries: 3
       start_period: 40s
 
-  zabbix-web-service:
-    image: zabbix/zabbix-web-service:${ZBX_IMAGE_TAG:-alpine-7.4-latest}
-    restart: unless-stopped
-    read_only: true
-    environment:
-      ZBX_ALLOWEDIP: zabbix-server,zabbix-web
-    volumes:
-      - ${DATA_DIRECTORY:-./data}/zabbix/enc:/var/lib/zabbix/enc:ro
-    tmpfs:
-      - /tmp
-      - /var/lib/zabbix/.config
-    depends_on:
-      zabbix-server:
-        condition: service_started
-    networks:
-      - zabbix-backend
-
 networks:
   zabbix-backend:
     driver: bridge
+
+volumes:
+  postgres_data:
