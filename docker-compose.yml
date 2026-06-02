@@ -1,0 +1,141 @@
+# Zabbix 7.4 server stack (PostgreSQL + server + web UI + web service).
+# Agents run on monitored hosts (native or separate compose) — not included here.
+#
+# Usage:
+#   cp .env.example .env   # set POSTGRES_PASSWORD and ZABBIX_WEB_PORT
+#   docker compose up -d
+#
+# Web UI: http://<host>:${ZABBIX_WEB_PORT:-8080}  (default login Admin / zabbix)
+# Agent trapper: <host>:10051
+
+services:
+  postgres:
+    image: postgres:${POSTGRES_IMAGE_TAG:-17-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-zabbix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-zabbix}
+    volumes:
+      - ${DATA_DIRECTORY:-./data}/postgres:/var/lib/postgresql/data
+    networks:
+      - zabbix-backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-zabbix} -d ${POSTGRES_DB:-zabbix}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  zabbix-server-db-init:
+    image: zabbix/zabbix-server-pgsql:${ZBX_IMAGE_TAG:-alpine-7.4-latest}
+    command: init_db_only
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      DB_SERVER_HOST: postgres
+      DB_SERVER_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-zabbix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-zabbix}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - zabbix-backend
+
+  zabbix-server:
+    image: zabbix/zabbix-server-pgsql:${ZBX_IMAGE_TAG:-alpine-7.4-latest}
+    restart: unless-stopped
+    ports:
+      - "${ZABBIX_SERVER_PORT:-10051}:10051"
+    environment:
+      DB_SERVER_HOST: postgres
+      DB_SERVER_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-zabbix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-zabbix}
+      ZBX_NODEADDRESS: zabbix-server:10051
+      ZBX_WEBSERVICEURL: http://zabbix-web-service:10053/report
+      ZBX_JAVAGATEWAY_ENABLE: "false"
+      ZBX_ENABLE_SNMP_TRAPS: "false"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${DATA_DIRECTORY:-./data}/zabbix/alertscripts:/usr/lib/zabbix/alertscripts:ro
+      - ${DATA_DIRECTORY:-./data}/zabbix/externalscripts:/usr/lib/zabbix/externalscripts:ro
+      - ${DATA_DIRECTORY:-./data}/zabbix/export:/var/lib/zabbix/export:rw
+      - ${DATA_DIRECTORY:-./data}/zabbix/modules:/var/lib/zabbix/modules:ro
+      - ${DATA_DIRECTORY:-./data}/zabbix/enc:/var/lib/zabbix/enc:ro
+      - ${DATA_DIRECTORY:-./data}/zabbix/ssh_keys:/var/lib/zabbix/ssh_keys:ro
+      - ${DATA_DIRECTORY:-./data}/zabbix/mibs:/var/lib/zabbix/mibs:ro
+      - ${DATA_DIRECTORY:-./data}/zabbix/ssl/certs:/var/lib/zabbix/ssl/certs:ro
+      - ${DATA_DIRECTORY:-./data}/zabbix/ssl/keys:/var/lib/zabbix/ssl/keys:ro
+      - ${DATA_DIRECTORY:-./data}/zabbix/ssl/ssl_ca:/var/lib/zabbix/ssl/ssl_ca:rw
+    depends_on:
+      postgres:
+        condition: service_healthy
+      zabbix-server-db-init:
+        condition: service_completed_successfully
+    networks:
+      - zabbix-backend
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 20000
+        hard: 40000
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-pgsql:${ZBX_IMAGE_TAG:-alpine-7.4-latest}
+    restart: unless-stopped
+    ports:
+      - "${ZABBIX_WEB_PORT:-8080}:8080"
+    environment:
+      DB_SERVER_HOST: postgres
+      DB_SERVER_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-zabbix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-zabbix}
+      ZBX_SERVER_HOST: zabbix-server
+      ZBX_SERVER_PORT: "10051"
+      ZBX_SERVER_NAME: ${ZABBIX_SERVER_NAME:-Zabbix monitoring}
+      PHP_TZ: ${TZ:-UTC}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      zabbix-server-db-init:
+        condition: service_completed_successfully
+      zabbix-server:
+        condition: service_started
+    networks:
+      - zabbix-backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/ping"]
+      interval: 90s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+
+  zabbix-web-service:
+    image: zabbix/zabbix-web-service:${ZBX_IMAGE_TAG:-alpine-7.4-latest}
+    restart: unless-stopped
+    read_only: true
+    environment:
+      ZBX_ALLOWEDIP: zabbix-server,zabbix-web
+    volumes:
+      - ${DATA_DIRECTORY:-./data}/zabbix/enc:/var/lib/zabbix/enc:ro
+    tmpfs:
+      - /tmp
+      - /var/lib/zabbix/.config
+    depends_on:
+      zabbix-server:
+        condition: service_started
+    networks:
+      - zabbix-backend
+
+networks:
+  zabbix-backend:
+    driver: bridge

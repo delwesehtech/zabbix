@@ -1,0 +1,29 @@
+# Optional: Zabbix Agent 2 on a monitored Linux host (Docker).
+# Copy/adapt per host — do NOT run on the Zabbix server host unless you only need local metrics.
+#
+#   cp docker-compose.agent.example.yml /path/on/host/docker-compose.agent.yml
+#   # Edit ZBX_HOSTNAME and ZBX_SERVER_HOST, then:
+#   docker compose -f docker-compose.agent.yml up -d
+#
+# ZBX_SERVER_HOST: IP or DNS of the host running the Zabbix server stack (port 10051 must be reachable).
+
+services:
+  zabbix-agent2:
+    image: zabbix/zabbix-agent2:${ZBX_IMAGE_TAG:-alpine-7.4-latest}
+    restart: unless-stopped
+    privileged: true
+    pid: host
+    ports:
+      - "10050:10050"
+    environment:
+      ZBX_HOSTNAME: ${ZBX_HOSTNAME:-change-to-unique-hostname}
+      ZBX_SERVER_HOST: ${ZBX_SERVER_HOST:-zabbix.example.com}
+      ZBX_SERVER_PORT: "10051"
+      ZBX_ACTIVE_ALLOW: "true"
+      ZBX_PASSIVE_ALLOW: "true"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /:/hostfs:ro
+      - /var/run:/var/run:ro
+    tmpfs:
+      - /tmp
