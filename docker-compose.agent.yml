@@ -1,15 +1,18 @@
-# Optional: Zabbix Agent 2 on a monitored Linux host (Docker).
+# Zabbix Agent 2 for a monitored Linux host — ACTIVE checks only.
 #
-# All host-specific values live in .env (single source of truth). Set there:
-#   ZBX_HOSTNAME     - unique name, must match the host created in the Zabbix UI
-#   ZBX_SERVER_HOST  - IP/DNS of the server, reachable from this agent (port 10051)
+# This file is IDENTICAL on every monitored host; only .env differs.
+# In .env set:
+#   ZBX_SERVER_HOST  - IP/DNS of the Zabbix server, reachable on 10051 from this host
+#   ZBX_METADATA     - autoregistration tag the server matches on (default: linux)
+#   ZBX_HOSTNAME     - leave empty to auto-use this machine's system hostname
 #   ZBX_IMAGE_TAG    - optional, defaults to alpine-7.4-latest
 #
-# Then, from the directory containing .env:
+# Deploy (from the directory containing .env):
 #   docker compose -f docker-compose.agent.yml up -d
-# (Compose auto-loads .env from the working directory — no extra flags needed.)
 #
-# This file is identical on every monitored host; only .env differs per host.
+# Active-only means: the agent connects OUT to the server (no inbound 10050),
+# so the same config works for local, remote, and NAT'd hosts. New hosts are
+# created automatically via an autoregistration action in the Zabbix UI.
 
 services:
   zabbix-agent2:
@@ -17,18 +20,14 @@ services:
     restart: unless-stopped
     privileged: true
     pid: host
-    ports:
-      - "10050:10050"
-    # Lets the agent reach the Docker host (and the server's published 10051)
-    # when running standalone on the same host. Set ZBX_SERVER_HOST=host.docker.internal.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    uts: host          # share host UTS namespace so system.hostname = real host name
     environment:
-      ZBX_HOSTNAME: ${ZBX_HOSTNAME:-change-to-unique-hostname}
-      ZBX_SERVER_HOST: ${ZBX_SERVER_HOST:-host.docker.internal}
+      ZBX_HOSTNAME: ${ZBX_HOSTNAME:-}                              # empty => use system hostname
+      ZBX_SERVER_HOST: ${ZBX_SERVER_HOST:?Set ZBX_SERVER_HOST in .env}
       ZBX_SERVER_PORT: "10051"
       ZBX_ACTIVE_ALLOW: "true"
-      ZBX_PASSIVE_ALLOW: "true"
+      ZBX_PASSIVE_ALLOW: "false"
+      ZBX_METADATA: ${ZBX_METADATA:-linux}                         # matched by the autoreg action
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /:/hostfs:ro

@@ -48,33 +48,39 @@ Hostname=<unique-hostname-matching-zabbix-ui>
 
 Restart the agent, then in the Zabbix UI add the host (Configuration → Hosts) with the same **Hostname** and link templates (e.g. “Linux by Zabbix agent”).
 
-### Agent in Docker on a monitored host
+### Agents: active checks + autoregistration (fleet model)
 
-`docker-compose.agent.yml` is the same on every host — only `.env` differs. On each monitored host, create a `.env` with that host's values:
+All Linux hosts are monitored the same way: **active checks only** (agent connects out to the server on 10051) and **autoregistration** (the server auto-creates each host on first connect). `docker-compose.agent.yml` is byte-identical on every host — only `.env` differs.
+
+#### One-time server setup (Zabbix UI)
+
+Create an autoregistration action so new agents become hosts automatically:
+
+1. **Data collection → Actions → Autoregistration actions → Create action**
+   - Name: `Linux autoregister`
+   - Condition: *Host metadata* **contains** `linux` (matches `ZBX_METADATA`)
+2. **Operations** tab — add:
+   - *Add host*
+   - *Add to host groups*: `Linux servers`
+   - *Link templates*: **Linux by Zabbix agent (active)**
+3. Enable the action.
+
+#### Per monitored host
 
 ```bash
-ZBX_HOSTNAME=myserver01        # unique, matches the host created in the UI
-ZBX_SERVER_HOST=10.0.0.5       # IP of the machine running the server stack
+# .env on that host:
+ZBX_SERVER_HOST=10.0.0.5   # the Zabbix server's IP/DNS (same on every host)
+ZBX_HOSTNAME=              # empty = use this machine's system hostname
+ZBX_METADATA=linux
 ```
 
 ```bash
 docker compose -f docker-compose.agent.yml up -d
 ```
 
-Register the host in the UI with hostname `myserver01`.
+Within a minute the host appears under **Data collection → Hosts** named after its system hostname, with the active Linux template linked. No manual host creation, no inbound 10050, no per-host interface IPs.
 
-### Agent on the same host as this stack
-
-Point the agent at the host’s LAN IP (`host.docker.internal` is not reliable on Linux). In `.env`:
-
-```bash
-ZBX_SERVER_HOST=192.168.1.10
-ZBX_HOSTNAME=zabbix-monitor-host
-```
-
-```bash
-docker compose -f docker-compose.agent.yml up -d
-```
+> The server's own host is just another agent: deploy the same file with the same `.env` (it reaches its own published 10051 via the host IP).
 
 Do not set `ZBX_SERVER_HOST=zabbix-server` unless the agent container shares a network with this stack (not the default setup).
 
