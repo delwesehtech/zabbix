@@ -19,9 +19,13 @@ services:
     pid: host
     ports:
       - "10050:10050"
+    # Lets the agent reach the Docker host (and the server's published 10051)
+    # when running standalone on the same host. Set ZBX_SERVER_HOST=host.docker.internal.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       ZBX_HOSTNAME: ${ZBX_HOSTNAME:-change-to-unique-hostname}
-      ZBX_SERVER_HOST: ${ZBX_SERVER_HOST:-zabbix.example.com}
+      ZBX_SERVER_HOST: ${ZBX_SERVER_HOST:-host.docker.internal}
       ZBX_SERVER_PORT: "10051"
       ZBX_ACTIVE_ALLOW: "true"
       ZBX_PASSIVE_ALLOW: "true"
