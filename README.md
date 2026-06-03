@@ -50,22 +50,30 @@ Restart the agent, then in the Zabbix UI add the host (Configuration → Hosts) 
 
 ### Agent in Docker on a monitored host
 
-Use `docker-compose.agent.example.yml` on each host:
+`docker-compose.agent.yml` is the same on every host — only `.env` differs. On each monitored host, create a `.env` with that host's values:
 
 ```bash
-export ZBX_HOSTNAME=myserver01
-export ZBX_SERVER_HOST=10.0.0.5   # IP of the machine running this compose stack
-docker compose -f docker-compose.agent.example.yml up -d
+ZBX_HOSTNAME=myserver01        # unique, matches the host created in the UI
+ZBX_SERVER_HOST=10.0.0.5       # IP of the machine running the server stack
+```
+
+```bash
+docker compose -f docker-compose.agent.yml up -d
 ```
 
 Register the host in the UI with hostname `myserver01`.
 
 ### Agent on the same host as this stack
 
-Point the agent at the host’s LAN IP (or `host.docker.internal` is not reliable on Linux). Example:
+Point the agent at the host’s LAN IP (`host.docker.internal` is not reliable on Linux). In `.env`:
 
 ```bash
-ZBX_SERVER_HOST=192.168.1.10 ZBX_HOSTNAME=zabbix-monitor-host docker compose -f docker-compose.agent.example.yml up -d
+ZBX_SERVER_HOST=192.168.1.10
+ZBX_HOSTNAME=zabbix-monitor-host
+```
+
+```bash
+docker compose -f docker-compose.agent.yml up -d
 ```
 
 Do not set `ZBX_SERVER_HOST=zabbix-server` unless the agent container shares a network with this stack (not the default setup).

@@ -6,8 +6,10 @@
 #   ZBX_IMAGE_TAG    - optional, defaults to alpine-7.4-latest
 #
 # Then, from the directory containing .env:
-#   docker compose -f docker-compose.agent.example.yml up -d
+#   docker compose -f docker-compose.agent.yml up -d
 # (Compose auto-loads .env from the working directory — no extra flags needed.)
+#
+# This file is identical on every monitored host; only .env differs per host.
 
 services:
   zabbix-agent2:
