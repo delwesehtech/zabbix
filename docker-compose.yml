@@ -1,119 +1,37 @@
-# Zabbix 7.4 server stack (PostgreSQL + server + web UI).
-# Agents run on monitored hosts (native package or the example agent compose) — not here.
+# Zabbix Agent 2 for a monitored Linux host — ACTIVE checks only.
 #
-# Usage (server host only):
-#   cp .env.server.example .env.server   # set POSTGRES_PASSWORD (required)
-#   docker compose --env-file .env.server -f docker-compose.yml up -d
+# This file is IDENTICAL on every monitored host; only .env differs.
+# In .env set:
+#   ZBX_SERVER_HOST  - IP/DNS of the Zabbix server, reachable on 10051 from this host
+#   ZBX_METADATA     - autoregistration tag the server matches on (default: linux)
+#   ZBX_HOSTNAME     - leave empty to auto-use this machine's system hostname
+#   ZBX_IMAGE_TAG    - optional, defaults to alpine-7.4-latest
 #
-# Web UI: http://<host>:${ZABBIX_WEB_PORT:-8080}  (default login Admin / zabbix)
-# Agent trapper: <host>:10051  (agents on the same trusted LAN, plaintext)
+# This is the DEFAULT compose file, so agent deploys need no -f / --env-file:
+#   cp .env.example .env     # then edit ZBX_SERVER_HOST
+#   docker compose up -d
+#
+# Active-only means: the agent connects OUT to the server (no inbound 10050),
+# so the same config works for local, remote, and NAT'd hosts. New hosts are
+# created automatically via an autoregistration action in the Zabbix UI.
 
 services:
-  postgres:
-    image: postgres:${POSTGRES_IMAGE_TAG:-17-alpine}
+  zabbix-agent2:
+    image: zabbix/zabbix-agent2:${ZBX_IMAGE_TAG:-alpine-7.4-latest}
     restart: unless-stopped
+    privileged: true
+    pid: host
+    uts: host          # share host UTS namespace so system.hostname = real host name
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-zabbix}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:-zabbix}
+      ZBX_HOSTNAME: ${ZBX_HOSTNAME:-}                              # empty => use system hostname
+      ZBX_SERVER_HOST: ${ZBX_SERVER_HOST:?Set ZBX_SERVER_HOST in .env}
+      ZBX_SERVER_PORT: "10051"
+      ZBX_ACTIVE_ALLOW: "true"
+      ZBX_PASSIVE_ALLOW: "false"
+      ZBX_METADATA: ${ZBX_METADATA:-linux}                         # matched by the autoreg action
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - zabbix-backend
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-zabbix} -d ${POSTGRES_DB:-zabbix}"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
-
-  zabbix-server-db-init:
-    image: zabbix/zabbix-server-pgsql:${ZBX_IMAGE_TAG:-alpine-7.4-latest}
-    command: init_db_only
-    restart: "no"
-    read_only: true
+      - /etc/localtime:/etc/localtime:ro
+      - /:/hostfs:ro
+      - /var/run:/var/run:ro
     tmpfs:
       - /tmp
-    environment:
-      DB_SERVER_HOST: postgres
-      DB_SERVER_PORT: "5432"
-      POSTGRES_USER: ${POSTGRES_USER:-zabbix}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-zabbix}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - zabbix-backend
-
-  zabbix-server:
-    image: zabbix/zabbix-server-pgsql:${ZBX_IMAGE_TAG:-alpine-7.4-latest}
-    restart: unless-stopped
-    ports:
-      - "${ZABBIX_SERVER_PORT:-10051}:10051"
-    environment:
-      DB_SERVER_HOST: postgres
-      DB_SERVER_PORT: "5432"
-      POSTGRES_USER: ${POSTGRES_USER:-zabbix}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-zabbix}
-      ZBX_NODEADDRESS: zabbix-server:10051
-      ZBX_JAVAGATEWAY_ENABLE: "false"
-      ZBX_ENABLE_SNMP_TRAPS: "false"
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      # Drop custom alert/external-check scripts into these host dirs (read-only to the container):
-      - ${DATA_DIRECTORY:-./data}/alertscripts:/usr/lib/zabbix/alertscripts:ro
-      - ${DATA_DIRECTORY:-./data}/externalscripts:/usr/lib/zabbix/externalscripts:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      zabbix-server-db-init:
-        condition: service_completed_successfully
-    networks:
-      - zabbix-backend
-    ulimits:
-      nproc: 65535
-      nofile:
-        soft: 20000
-        hard: 40000
-
-  zabbix-web:
-    image: zabbix/zabbix-web-nginx-pgsql:${ZBX_IMAGE_TAG:-alpine-7.4-latest}
-    restart: unless-stopped
-    ports:
-      - "${ZABBIX_WEB_PORT:-8080}:8080"
-    environment:
-      DB_SERVER_HOST: postgres
-      DB_SERVER_PORT: "5432"
-      POSTGRES_USER: ${POSTGRES_USER:-zabbix}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-zabbix}
-      ZBX_SERVER_HOST: zabbix-server
-      ZBX_SERVER_PORT: "10051"
-      ZBX_SERVER_NAME: ${ZABBIX_SERVER_NAME:-Zabbix monitoring}
-      PHP_TZ: ${TZ:-UTC}
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      zabbix-server-db-init:
-        condition: service_completed_successfully
-      zabbix-server:
-        condition: service_started
-    networks:
-      - zabbix-backend
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/ping"]
-      interval: 90s
-      timeout: 3s
-      retries: 3
-      start_period: 40s
-
-networks:
-  zabbix-backend:
-    driver: bridge
-
-volumes:
-  postgres_data:
