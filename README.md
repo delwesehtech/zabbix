@@ -11,13 +11,24 @@ Monitored machines use **Zabbix Agent** (installed on the host) or **Agent 2 in 
   - **10051/TCP** — Zabbix server (agents send data here)
   - **8051/TCP** (or your `ZABBIX_WEB_PORT`) — web UI
 
-## Quick start
+## Configuration files
+
+Server and agent config are kept separate (the agent host never needs the DB password):
+
+| Template | Copy to | Used by | Runs on | Command |
+|----------|---------|---------|---------|---------|
+| `.env.example` | `.env` | `docker-compose.agent.yml` | every monitored host | auto-loaded (no flag) |
+| `.env.server.example` | `.env.server` | `docker-compose.yml` | the server host | `--env-file .env.server` |
+
+Both real files are gitignored. Agents use the default `.env` (Compose loads it automatically); only the server is explicit, so the two never collide — even on a host that runs both.
+
+## Quick start (server host)
 
 ```bash
 cd ~/code/monitoring/zabbix
-cp .env.example .env
-# Edit .env: set POSTGRES_PASSWORD (required), TZ, ZABBIX_WEB_PORT if needed
-docker compose up -d
+cp .env.server.example .env.server
+# Edit .env.server: set POSTGRES_PASSWORD (required), TZ, ZABBIX_WEB_PORT if needed
+docker compose --env-file .env.server -f docker-compose.yml up -d
 ```
 
 First startup can take 1–3 minutes while the database is initialized.
@@ -28,8 +39,8 @@ First startup can take 1–3 minutes while the database is initialized.
 Check status:
 
 ```bash
-docker compose ps
-docker compose logs -f zabbix-server
+docker compose --env-file .env.server -f docker-compose.yml ps
+docker compose --env-file .env.server -f docker-compose.yml logs -f zabbix-server
 ```
 
 ## Connecting agents
@@ -67,20 +78,20 @@ Create an autoregistration action so new agents become hosts automatically:
 
 #### Per monitored host
 
-```bash
-# .env on that host:
-ZBX_SERVER_HOST=10.0.0.5   # the Zabbix server's IP/DNS (same on every host)
-ZBX_HOSTNAME=              # empty = use this machine's system hostname
-ZBX_METADATA=linux
-```
+Ship `docker-compose.agent.yml` + `.env.example` to the host, then:
 
 ```bash
+cp .env.example .env
+# Edit .env:
+#   ZBX_SERVER_HOST=zabbix.example.com   # the server's IP/DNS (same on every host)
+#   ZBX_HOSTNAME=                        # empty = use this machine's system hostname
+#   ZBX_METADATA=linux
 docker compose -f docker-compose.agent.yml up -d
 ```
 
 Within a minute the host appears under **Data collection → Hosts** named after its system hostname, with the active Linux template linked. No manual host creation, no inbound 10050, no per-host interface IPs.
 
-> The server's own host is just another agent: deploy the same file with the same `.env` (it reaches its own published 10051 via the host IP).
+> The server's own host is just another agent: put the agent values in `.env` and run `docker compose -f docker-compose.agent.yml up -d`. The server stack uses `.env.server` via `--env-file`, so the agent's default `.env` and the server's `.env.server` coexist cleanly on that one host.
 
 Do not set `ZBX_SERVER_HOST=zabbix-server` unless the agent container shares a network with this stack (not the default setup).
 

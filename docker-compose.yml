@@ -1,9 +1,9 @@
 # Zabbix 7.4 server stack (PostgreSQL + server + web UI).
 # Agents run on monitored hosts (native package or the example agent compose) — not here.
 #
-# Usage:
-#   cp .env.example .env   # set POSTGRES_PASSWORD (required)
-#   docker compose up -d
+# Usage (server host only):
+#   cp .env.server.example .env.server   # set POSTGRES_PASSWORD (required)
+#   docker compose --env-file .env.server -f docker-compose.yml up -d
 #
 # Web UI: http://<host>:${ZABBIX_WEB_PORT:-8080}  (default login Admin / zabbix)
 # Agent trapper: <host>:10051  (agents on the same trusted LAN, plaintext)

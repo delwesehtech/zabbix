@@ -1,2 +1,4 @@
+# Real env files (contain secrets / host-specific values) — keep only *.example
 .env
+.env.server
 data/

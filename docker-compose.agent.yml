@@ -7,7 +7,8 @@
 #   ZBX_HOSTNAME     - leave empty to auto-use this machine's system hostname
 #   ZBX_IMAGE_TAG    - optional, defaults to alpine-7.4-latest
 #
-# Deploy (from the directory containing .env):
+# Deploy (Compose auto-loads .env — no --env-file needed):
+#   cp .env.example .env     # then edit ZBX_SERVER_HOST
 #   docker compose -f docker-compose.agent.yml up -d
 #
 # Active-only means: the agent connects OUT to the server (no inbound 10050),
