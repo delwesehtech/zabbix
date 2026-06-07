@@ -95,6 +95,19 @@ Within a minute the host appears under **Data collection → Hosts** named after
 
 Do not set `ZBX_SERVER_HOST=zabbix-server` unless the agent container shares a network with this stack (not the default setup).
 
+#### Metric accuracy when running as a container
+
+The agent is configured to give accurate host metrics despite running in Docker:
+
+| Metric category | Accurate | How |
+|---|---|---|
+| CPU, memory, load, processes | Yes | `pid: host` shares `/proc` with the host |
+| Disk space / inodes | Yes | `/:/hostfs:ro` — the image uses it automatically |
+| Disk I/O | Yes | `/proc/diskstats` is the host's via `pid: host` |
+| Network in/out, packets, errors | Yes | `network_mode: host` shares the host network namespace |
+
+Without `network_mode: host` the agent would be in Docker's isolated network namespace and see only the container's virtual interface — missing all real host NIC traffic. Confirmed empirically: without it, `net.if.discovery` returned `eth0` (container veth) instead of the host's physical interfaces (e.g. `eno12399np0`).
+
 ## Firewall (example)
 
 ```bash

@@ -21,6 +21,7 @@ services:
     restart: unless-stopped
     privileged: true
     pid: host
+    network_mode: host  # share host network namespace so net.if.* metrics see real interfaces
     uts: host          # share host UTS namespace so system.hostname = real host name
     environment:
       ZBX_HOSTNAME: ${ZBX_HOSTNAME:-}                              # empty => use system hostname
